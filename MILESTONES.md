@@ -1,42 +1,44 @@
-# Build milestones
+# Status & next steps
 
-## M0 — Core brain + safety ✅
-- Ollama-backed agent loop with tool calling
-- Tool registry + system / input tools
-- Sandbox controller + Go-Live state machine + audit log
-- SQLite + embeddings memory
-- FastAPI `/chat`
+## Done
+- [x] Agent brain (Qwen2.5-7B + tool calling)
+- [x] Sandbox ↔ Live + audit log
+- [x] Workshop Mode + trusted targets (no permission spam on lab gear)
+- [x] unrestricted_local for offline / wired-only machines
+- [x] PC control (mouse, keyboard, files, clipboard, processes)
+- [x] Vision (screenshot + OCR, webcam)
+- [x] Web (Playwright)
+- [x] Voice stubs (faster-whisper + Piper en_GB-alba)
+- [x] Holographic FRIDAY HUD
+- [x] Self-skill system (create → test → promote)
+- [x] Forensics tools she drives: nmap, hashcat, john, binwalk, file, strings
+- [x] Allow-listed shell (`run_command`)
+- [x] Tool router (doesn't dump every tool every turn)
+- [x] ETA in HUD
 
-## M1 — Voice (in progress)
-- [x] faster-whisper STT wrapper
-- [x] Piper TTS wrapper (`en_GB-alba-medium` British female)
-- [x] Voice pipeline (record → STT → TTS → play)
-- [ ] Global push-to-talk hotkey (desktop shell)
-- [ ] Optional openWakeWord "Hey Friday"
+## Next (priority order)
 
-## M2 — Vision ✅ (basic)
-- [x] Screenshot + Tesseract OCR (`what_is_on_screen`)
-- [x] Webcam capture
-- [ ] Proactive screen diffing (opt-in)
+### 1. Desktop shell (highest impact)
+- Tauri app wrapping the HUD
+- Always-on-top overlay / system tray
+- Global push-to-talk hotkey
+- Start with OS so she feels like a real installed assistant
 
-## M3 — Web & agentic tools ✅ (basic)
-- [x] Playwright browse_url + search_web
-- [ ] Form fill / click helpers
-- [ ] Multi-step chain examples
+### 2. Voice completion
+- Wire push-to-talk end-to-end
+- Optional "Hey Friday" wake word
+- Interruptible TTS
 
-## M4 — Desktop shell (next)
-- Tauri app + Iron-Man HUD (from the HTML mock)
-- System tray + global hotkeys
-- Always-on-top live-mode red ring
-- Settings panel
+### 3. Stronger forensics workflows
+- Pre-built skill packs: "image this disk", "extract hashes", "run wordlist attack"
+- Mount helpers for encrypted volumes (she prints the cryptsetup/mount commands if root needed)
+- Progress / ETA for long hashcat jobs
 
-## M5 — Security hardening
-- More allow-listed tools (hashcat, binwalk, john)
-- Audit log viewer in UI
-- Ownership attestation flow polish
+### 4. Proactive mode
+- Optional background watchers (disk plugged in, process crash, network change)
+- She initiates: "Boss, new block device at /dev/sdc — want me to image it?"
 
-## M6 — Polish
-- Persona few-shot tuning
-- Self-tool creation (sandboxed draft → user approve)
-- One-click installer / packaging
-- Optional Kokoro-82M higher-quality TTS path
+### 5. Polish
+- One-click installer
+- Better persona few-shots
+- Optional higher-quality TTS (Kokoro) path
