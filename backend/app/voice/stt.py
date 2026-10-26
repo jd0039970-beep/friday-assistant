@@ -19,3 +19,16 @@ class FasterWhisperSTT:
         model = self._load()
         segments, _ = model.transcribe(audio_path, beam_size=5)
         return " ".join(s.text.strip() for s in segments).strip()
+
+    def transcribe_bytes(self, data: bytes, suffix: str = ".webm") -> str:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+            f.write(data)
+            path = f.name
+        try:
+            return self.transcribe(path)
+        finally:
+            try:
+                Path(path).unlink(missing_ok=True)
+            except Exception:
+                pass
