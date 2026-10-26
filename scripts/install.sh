@@ -1,68 +1,45 @@
 #!/usr/bin/env bash
+# F.R.I.D.A.Y self-healing Linux/macOS install
 set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
 
-echo "=============================================="
-echo "  F.R.I.D.A.Y local install (Linux / macOS)"
-echo "=============================================="
+echo "========================================"
+echo " F.R.I.D.A.Y self-healing install"
+echo "========================================"
 
-# --- Ollama ---
-if ! command -v ollama &>/dev/null; then
-  echo "-- Installing Ollama"
-  curl -fsSL https://ollama.com/install.sh | sh
-else
-  echo "-- Ollama already installed"
-fi
+command -v python3 >/dev/null || { echo "Install Python 3.11+"; exit 1; }
+echo "[OK] $(python3 --version)"
 
-echo "-- Pulling models (one-time download, then fully offline)"
-ollama pull qwen2.5:7b-instruct-q4_K_M
-ollama pull nomic-embed-text
-
-# --- Python ---
-echo "-- Setting up Python virtual environment"
-cd "$(dirname "$0")/../backend"
+cd "$ROOT/backend"
 python3 -m venv .venv
+# shellcheck disable=SC1091
 source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# Playwright browsers (for web tools)
-echo "-- Installing Playwright Chromium"
-playwright install chromium || echo "   Playwright browser install skipped / failed"
-
-# --- Docker sandbox (optional) ---
-if command -v docker &>/dev/null; then
-  echo "-- Building security sandbox Docker image"
-  docker build -t friday-sandbox:latest -f ../scripts/Dockerfile.sandbox ../scripts || true
+pip install -U pip
+if [[ -f requirements.txt ]]; then
+  pip install -r requirements.txt
 else
-  echo "-- Docker not found. Security sandbox tools will be unavailable until Docker is installed."
+  pip install fastapi "uvicorn[standard]" httpx pyyaml numpy pillow faster-whisper pydantic python-multipart
+fi
+echo "[OK] Python packages"
+
+mkdir -p "$HOME/.friday"/{skills,plans,inbox}
+echo "[OK] ~/.friday"
+
+if command -v ollama >/dev/null; then
+  echo "[--] Pulling models..."
+  ollama pull qwen2.5:7b-instruct-q4_K_M
+  ollama pull nomic-embed-text
+  echo "[OK] Models"
+else
+  echo "[!] Install Ollama from https://ollama.com/download then re-run to pull models"
 fi
 
-# --- Piper TTS (recommended) ---
-echo "-- Piper TTS (British female voice)"
-echo "   Run after activate:  pip install piper-tts && python -m piper.download_voices en_GB-alba-medium"
+command -v docker >/dev/null && echo "[OK] Docker" || echo "[!] Docker optional for sandbox"
 
-# --- Tesseract (OCR) ---
-if ! command -v tesseract &>/dev/null; then
-  echo "-- Tesseract OCR not found. Install it for screen reading:"
-  echo "   Ubuntu/Debian: sudo apt install tesseract-ocr"
-  echo "   macOS:         brew install tesseract"
-fi
+chmod +x "$ROOT/scripts/start.sh" "$ROOT/scripts/backup_friday.sh" "$ROOT/scripts/restore_friday.sh" 2>/dev/null || true
 
-cat <<'EOF'
-
-==============================================
-  Install complete.
-==============================================
-
-Next steps:
-  1. source backend/.venv/bin/activate
-  2. cd backend && python -m app.main
-  3. (optional) install Piper voice:
-       pip install piper-tts
-       python -m piper.download_voices en_GB-alba-medium
-  4. Test:
-       curl -X POST http://127.0.0.1:8787/chat \
-         -H 'Content-Type: application/json' \
-         -d '{"message": "Hello Friday, status report."}'
-
-EOF
+echo ""
+echo "Install complete. Start with: bash scripts/start.sh"
+echo "BEFORE wipe: bash scripts/backup_friday.sh"
+echo "AFTER reinstall: bash scripts/restore_friday.sh"
