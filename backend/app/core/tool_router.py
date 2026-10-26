@@ -13,6 +13,7 @@ CATEGORIES = {
         "request_go_live", "confirm_go_live", "stand_down",
         "run_nmap", "run_hashcat", "run_john", "run_binwalk", "run_file", "run_strings",
         "enable_workshop_mode", "add_trusted_target", "list_trusted",
+        "list_forensics_packs", "run_forensics_pack",
     ],
     "skills": ["list_skills", "create_skill", "run_skill", "promote_skill"],
 }
@@ -24,7 +25,7 @@ KEYWORDS = {
     "security": [
         "scan", "nmap", "hack", "port", "hash", "crack", "binwalk", "john", "hashcat",
         "live", "sandbox", "workshop", "trusted", "lab", "encrypt", "drive", "disk",
-        "forensic", "firmware", "password", "wordlist",
+        "forensic", "firmware", "password", "wordlist", "pack", "identify",
     ],
     "skills": ["skill", "new tool", "create tool", "add ability", "learn how"],
 }
