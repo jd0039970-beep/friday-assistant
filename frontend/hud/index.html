@@ -67,7 +67,7 @@ body.live .core-label{color:#ff8a8a}
   <div class="row"><span>Mode</span><b id="modeLabel">SANDBOX</b></div>
   <div class="row"><span>Model</span><b>Qwen2.5-7B</b></div>
   <div class="row"><span>Voice</span><b>Tab = talk</b></div>
-  <div class="row"><span>Silence</span><b>Esc</b></div>
+  <div class="row"><span>Power</span><b>Esc = OFF</b></div>
   <div class="row"><span>Workshop</span><b id="labMode">OFF</b></div>
   <div class="row"><span>Trusted</span><b id="trustedCount">0</b></div>
 </aside>
@@ -78,7 +78,7 @@ body.live .core-label{color:#ff8a8a}
   <div id="proactive"></div>
 </aside>
 <div class="stream" id="stream"></div>
-<div class="hint">TAB hold = talk &nbsp;·&nbsp; ESC = silence &nbsp;·&nbsp; Enter = send</div>
+<div class="hint">TAB hold = talk &nbsp;·&nbsp; ESC = SHUT DOWN &nbsp;·&nbsp; Enter = send</div>
 <div class="holo-card" id="holoCard">
   <span class="close" onclick="closeHolo()">×</span>
   <h4 id="holoTitle">RESULT</h4>
@@ -180,7 +180,6 @@ async function send(text){
 }
 input.addEventListener("keydown",e=>{if(e.key==="Enter")send(input.value)});
 
-// proactive poll
 setInterval(async()=>{
   try{
     const r=await fetch(API+"/proactive");

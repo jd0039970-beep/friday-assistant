@@ -1,6 +1,9 @@
 """FastAPI entrypoint for F.R.I.D.A.Y."""
 from __future__ import annotations
 
+import os
+import signal
+import threading
 from pathlib import Path
 
 import yaml
@@ -35,7 +38,7 @@ def load_config() -> dict:
 
 
 config = load_config()
-app = FastAPI(title="F.R.I.D.A.Y", version="0.5.0")
+app = FastAPI(title="F.R.I.D.A.Y", version="0.5.1")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 HUD_DIR = Path(__file__).resolve().parents[2] / "frontend" / "hud"
@@ -131,6 +134,28 @@ def chat(req: ChatRequest):
     )
 
 
+@app.post("/shutdown")
+def shutdown():
+    """Full stop: stand down Live, stop proactive, exit process."""
+    try:
+        sandbox.stand_down()
+    except Exception:
+        pass
+    try:
+        proactive.stop()
+    except Exception:
+        pass
+    audit_log.write("shutdown", reason="user Esc / API")
+
+    def _exit():
+        import time
+        time.sleep(0.3)
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    threading.Thread(target=_exit, daemon=True).start()
+    return {"status": "shutting_down"}
+
+
 @app.get("/proactive")
 def get_proactive():
     return {"suggestions": proactive.pop_suggestions()}
@@ -144,7 +169,7 @@ def health():
         "sandbox_state": sandbox.current_state(),
         "workshop_mode": workshop.enabled,
         "trusted_targets": len(workshop.trusted),
-        "version": "0.5.0",
+        "version": "0.5.1",
     }
 
 
@@ -163,5 +188,5 @@ if __name__ == "__main__":
     print("F.R.I.D.A.Y online")
     print("  API  → http://127.0.0.1:8787")
     print("  HUD  → http://127.0.0.1:8787/hud/")
-    print("  Tab = push-to-talk · Esc = silence")
+    print("  Tab = push-to-talk · Esc = SHUT DOWN")
     uvicorn.run(app, host=config["server"]["host"], port=config["server"]["port"])

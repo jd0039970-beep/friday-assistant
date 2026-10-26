@@ -1,4 +1,4 @@
-/** Tab = push-to-talk, Esc = silence Friday */
+/** Tab = push-to-talk (hold). Esc = FULL SHUTDOWN (quit Friday). */
 (function () {
   const API = "http://127.0.0.1:8787";
   let recording = false;
@@ -25,11 +25,8 @@
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         const blob = new Blob(chunks, { type: "audio/webm" });
-        // For now: notify backend that PTT ended; full STT upload can be added
-        // when /voice endpoint accepts multipart. Fallback: user types.
         setState("thinking");
         console.log("[PTT] recorded", blob.size, "bytes");
-        // Optional: POST blob to /voice when endpoint is ready
         setState("");
       };
       mediaRecorder.start();
@@ -46,20 +43,37 @@
     try { mediaRecorder.stop(); } catch (_) {}
   }
 
-  function silence() {
-    // Stop any TTS playback + cancel in-flight feel
+  /** Full shutdown: stop voice, stand down live, kill backend, close UI */
+  async function shutdown() {
     stopPTT();
-    setState("");
     if (window.speechSynthesis) window.speechSynthesis.cancel();
-    // Best-effort: tell backend to stand down speaking
-    fetch(API + "/health").catch(() => {});
-    const stream = document.getElementById("stream");
-    if (stream) {
+    setState("");
+
+    const streamEl = document.getElementById("stream");
+    if (streamEl) {
       const d = document.createElement("div");
       d.className = "msg friday";
-      d.innerHTML = '<span class="tag">FRIDAY</span>Standing by.';
-      stream.appendChild(d);
-      stream.scrollTop = stream.scrollHeight;
+      d.innerHTML = '<span class="tag">FRIDAY</span>Shutting down.';
+      streamEl.appendChild(d);
+    }
+
+    // Ask backend to stand down + exit
+    try {
+      await fetch(API + "/shutdown", { method: "POST" });
+    } catch (_) {}
+
+    // Close window (works in Tauri and most desktop webviews)
+    try {
+      if (window.__TAURI__) {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        await getCurrentWindow().close();
+      } else {
+        window.close();
+      }
+    } catch (_) {
+      // Last resort: blank the page so it's obvious she's off
+      document.body.innerHTML =
+        '<div style="height:100vh;display:flex;align-items:center;justify-content:center;background:#02060c;color:#3fd0ff;font-family:Orbitron,sans-serif;letter-spacing:.2em">FRIDAY OFFLINE</div>';
     }
   }
 
@@ -70,7 +84,7 @@
     }
     if (e.code === "Escape") {
       e.preventDefault();
-      silence();
+      shutdown();
     }
   });
 
@@ -81,5 +95,5 @@
     }
   });
 
-  console.log("[Friday] Hotkeys: Tab = push-to-talk, Esc = silence");
+  console.log("[Friday] Tab = talk · Esc = SHUT DOWN");
 })();
