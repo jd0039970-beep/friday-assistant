@@ -1,7 +1,6 @@
 """FastAPI entrypoint. Run with: python -m app.main (from backend/)."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import yaml
@@ -17,6 +16,9 @@ from .sandbox.security_tools import register_security_tools
 from .tools.input_tools import register_input_tools
 from .tools.registry import ToolRegistry
 from .tools.system_tools import register_system_tools
+from .tools.web_tools import register_web_tools
+from .vision.screen import screen_text, capture_screenshot
+from .vision.webcam import capture_webcam
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
 
@@ -27,7 +29,7 @@ def load_config() -> dict:
 
 
 config = load_config()
-app = FastAPI(title="F.R.I.D.A.Y backend")
+app = FastAPI(title="F.R.I.D.A.Y backend", version="0.2.0")
 
 llm = OllamaClient(
     base_url=config["llm"]["base_url"],
@@ -42,11 +44,29 @@ tools = ToolRegistry()
 register_system_tools(tools)
 register_input_tools(tools)
 register_security_tools(tools, sandbox, voice_sourced=False)
+register_web_tools(tools, headless=config.get("web", {}).get("headless", True))
+
+# Vision tools
+def _screen_text() -> str:
+    return screen_text(lang=config.get("vision", {}).get("tesseract_lang", "eng"))
+
+def _screenshot() -> str:
+    return capture_screenshot()
+
+def _webcam() -> str:
+    return capture_webcam()
+
+tools.register("what_is_on_screen", "Take a screenshot and OCR the text visible on screen",
+               {"type": "object", "properties": {}}, _screen_text)
+tools.register("take_screenshot", "Save a screenshot and return the file path",
+               {"type": "object", "properties": {}}, _screenshot)
+tools.register("capture_webcam", "Capture a frame from the webcam",
+               {"type": "object", "properties": {}}, _webcam)
 
 agent_config = AgentConfig(
-    max_tool_iterations=config["llm"].get("max_tool_iterations", 8),
+    max_tool_iterations=config["llm"].get("max_tool_iterations", 10),
     embed_model=config["llm"]["embed_model"],
-    recall_k=config["memory"].get("recall_k", 6),
+    recall_k=config["memory"].get("recall_k", 8),
 )
 
 
@@ -70,6 +90,7 @@ class ChatResponse(BaseModel):
     reply: str | None
     needs_confirmation: dict | None
     sandbox_state: str
+    tool_trace: list | None = None
 
 
 @app.post("/chat", response_model=ChatResponse)
@@ -79,12 +100,12 @@ def chat(req: ChatRequest):
 
     result = agent.run(req.message, history=history, pending_confirmation=pending)
 
-    if result["needs_confirmation"] is None:
+    if result["needs_confirmation"] is None and result.get("reply"):
         history.append({"role": "user", "content": req.message})
         history.append({"role": "assistant", "content": result["reply"]})
-        # memory write is best-effort
         try:
-            agent.memory.add(f"User: {req.message}\nFriday: {result['reply']}")
+            emb = llm.embed(req.message, config["llm"]["embed_model"])
+            memory.add(f"User: {req.message}\nFriday: {result['reply']}", embedding=emb)
         except Exception:
             pass
 
@@ -92,6 +113,7 @@ def chat(req: ChatRequest):
         reply=result["reply"],
         needs_confirmation=result["needs_confirmation"],
         sandbox_state=sandbox.current_state(),
+        tool_trace=result.get("tool_trace"),
     )
 
 
@@ -102,7 +124,17 @@ def get_audit(n: int = 50):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model": config["llm"]["model"], "sandbox_state": sandbox.current_state()}
+    return {
+        "status": "ok",
+        "model": config["llm"]["model"],
+        "sandbox_state": sandbox.current_state(),
+        "version": "0.2.0",
+    }
+
+
+@app.get("/tools")
+def list_tools():
+    return [s["function"]["name"] for s in tools.schemas()]
 
 
 if __name__ == "__main__":
