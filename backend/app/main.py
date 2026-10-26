@@ -12,9 +12,11 @@ from pydantic import BaseModel
 from .core.agent_loop import AgentConfig, AgentLoop
 from .core.llm_client import OllamaClient
 from .memory.store import MemoryStore
+from .proactive import ProactiveMonitor
 from .sandbox.audit_log import AuditLog
 from .sandbox.controller import SandboxController
 from .sandbox.security_tools import register_security_tools, workshop
+from .skills.packs.forensics import list_forensics_packs
 from .skills.store import list_skills, create_skill, run_skill, promote_skill
 from .tools.input_tools import register_input_tools
 from .tools.registry import ToolRegistry
@@ -33,7 +35,7 @@ def load_config() -> dict:
 
 
 config = load_config()
-app = FastAPI(title="F.R.I.D.A.Y", version="0.4.0")
+app = FastAPI(title="F.R.I.D.A.Y", version="0.5.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 HUD_DIR = Path(__file__).resolve().parents[2] / "frontend" / "hud"
@@ -45,6 +47,7 @@ llm = OllamaClient(base_url=config["llm"]["base_url"], model=config["llm"]["mode
 memory = MemoryStore(config["memory"]["db_path"])
 audit_log = AuditLog(config["audit_log_path"])
 sandbox = SandboxController(config["sandbox"], audit_log)
+proactive = ProactiveMonitor(interval=15.0)
 
 tools = ToolRegistry()
 register_system_tools(tools)
@@ -53,25 +56,24 @@ register_shell_tools(tools)
 register_security_tools(tools, sandbox, voice_sourced=False)
 register_web_tools(tools, headless=config.get("web", {}).get("headless", True))
 
-tools.register("what_is_on_screen", "Screenshot + OCR of current screen",
+tools.register("what_is_on_screen", "Screenshot + OCR",
                {"type": "object", "properties": {}}, lambda: screen_text())
-tools.register("take_screenshot", "Save screenshot, return path",
+tools.register("take_screenshot", "Save screenshot",
                {"type": "object", "properties": {}}, lambda: capture_screenshot())
-tools.register("capture_webcam", "Capture webcam frame",
+tools.register("capture_webcam", "Webcam frame",
                {"type": "object", "properties": {}}, lambda: capture_webcam())
-
 tools.register("list_skills", "List custom skills",
                {"type": "object", "properties": {}}, list_skills)
-tools.register("create_skill", "Draft a new Python skill",
+tools.register("create_skill", "Draft new skill",
                {"type": "object", "properties": {
-                   "name": {"type": "string"},
-                   "description": {"type": "string"},
-                   "code": {"type": "string"},
+                   "name": {"type": "string"}, "description": {"type": "string"}, "code": {"type": "string"},
                }, "required": ["name", "description", "code"]}, create_skill)
-tools.register("run_skill", "Run a custom skill",
+tools.register("run_skill", "Run custom skill",
                {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}, run_skill)
-tools.register("promote_skill", "Promote draft skill to active",
+tools.register("promote_skill", "Promote skill",
                {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}, promote_skill)
+tools.register("list_forensics_packs", "List built-in forensics workflows",
+               {"type": "object", "properties": {}}, list_forensics_packs)
 
 tools.workshop_relaxed = workshop.enabled
 
@@ -100,13 +102,17 @@ class ChatResponse(BaseModel):
     workshop_mode: bool = False
 
 
+@app.on_event("startup")
+def _start_proactive():
+    proactive.start()
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
     tools.workshop_relaxed = workshop.enabled
     history = _sessions.setdefault(req.session_id, [])
     pending = (req.confirm_tool, req.confirm_arguments) if req.confirm_tool else None
     result = agent.run(req.message, history=history, pending_confirmation=pending)
-
     if result["needs_confirmation"] is None and result.get("reply"):
         history.append({"role": "user", "content": req.message})
         history.append({"role": "assistant", "content": result["reply"]})
@@ -115,7 +121,6 @@ def chat(req: ChatRequest):
             memory.add(f"User: {req.message}\nFriday: {result['reply']}", embedding=emb)
         except Exception:
             pass
-
     return ChatResponse(
         reply=result["reply"],
         needs_confirmation=result["needs_confirmation"],
@@ -126,6 +131,11 @@ def chat(req: ChatRequest):
     )
 
 
+@app.get("/proactive")
+def get_proactive():
+    return {"suggestions": proactive.pop_suggestions()}
+
+
 @app.get("/health")
 def health():
     return {
@@ -134,7 +144,7 @@ def health():
         "sandbox_state": sandbox.current_state(),
         "workshop_mode": workshop.enabled,
         "trusted_targets": len(workshop.trusted),
-        "version": "0.4.0",
+        "version": "0.5.0",
     }
 
 
@@ -153,4 +163,5 @@ if __name__ == "__main__":
     print("F.R.I.D.A.Y online")
     print("  API  → http://127.0.0.1:8787")
     print("  HUD  → http://127.0.0.1:8787/hud/")
+    print("  Tab = push-to-talk · Esc = silence")
     uvicorn.run(app, host=config["server"]["host"], port=config["server"]["port"])
