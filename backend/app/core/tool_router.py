@@ -16,6 +16,7 @@ CATEGORIES = {
         "list_forensics_packs", "run_forensics_pack",
     ],
     "skills": ["list_skills", "create_skill", "run_skill", "promote_skill"],
+    "planner": ["create_plan", "list_plans", "plan_status", "mark_step"],
 }
 
 KEYWORDS = {
@@ -28,6 +29,7 @@ KEYWORDS = {
         "forensic", "firmware", "password", "wordlist", "pack", "identify",
     ],
     "skills": ["skill", "new tool", "create tool", "add ability", "learn how"],
+    "planner": ["plan", "long task", "multi-step", "steps", "roadmap", "workflow", "over time"],
 }
 
 
