@@ -1,10 +1,12 @@
-"""FastAPI entrypoint. Run with: python -m app.main (from backend/)."""
+"""FastAPI entrypoint for F.R.I.D.A.Y."""
 from __future__ import annotations
 
 from pathlib import Path
 
 import yaml
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .core.agent_loop import AgentConfig, AgentLoop
@@ -12,7 +14,8 @@ from .core.llm_client import OllamaClient
 from .memory.store import MemoryStore
 from .sandbox.audit_log import AuditLog
 from .sandbox.controller import SandboxController
-from .sandbox.security_tools import register_security_tools
+from .sandbox.security_tools import register_security_tools, workshop
+from .skills.store import list_skills, create_skill, run_skill, promote_skill
 from .tools.input_tools import register_input_tools
 from .tools.registry import ToolRegistry
 from .tools.system_tools import register_system_tools
@@ -29,13 +32,16 @@ def load_config() -> dict:
 
 
 config = load_config()
-app = FastAPI(title="F.R.I.D.A.Y backend", version="0.2.0")
+app = FastAPI(title="F.R.I.D.A.Y", version="0.3.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-llm = OllamaClient(
-    base_url=config["llm"]["base_url"],
-    model=config["llm"]["model"],
-    temperature=config["llm"].get("temperature", 0.4),
-)
+# Serve the holographic HUD
+HUD_DIR = Path(__file__).resolve().parents[2] / "frontend" / "hud"
+if HUD_DIR.exists():
+    app.mount("/hud", StaticFiles(directory=str(HUD_DIR), html=True), name="hud")
+
+llm = OllamaClient(base_url=config["llm"]["base_url"], model=config["llm"]["model"],
+                   temperature=config["llm"].get("temperature", 0.4))
 memory = MemoryStore(config["memory"]["db_path"])
 audit_log = AuditLog(config["audit_log_path"])
 sandbox = SandboxController(config["sandbox"], audit_log)
@@ -46,35 +52,36 @@ register_input_tools(tools)
 register_security_tools(tools, sandbox, voice_sourced=False)
 register_web_tools(tools, headless=config.get("web", {}).get("headless", True))
 
-# Vision tools
-def _screen_text() -> str:
-    return screen_text(lang=config.get("vision", {}).get("tesseract_lang", "eng"))
+# Vision
+tools.register("what_is_on_screen", "Screenshot + OCR of current screen",
+               {"type": "object", "properties": {}}, lambda: screen_text())
+tools.register("take_screenshot", "Save screenshot, return path",
+               {"type": "object", "properties": {}}, lambda: capture_screenshot())
+tools.register("capture_webcam", "Capture webcam frame",
+               {"type": "object", "properties": {}}, lambda: capture_webcam())
 
-def _screenshot() -> str:
-    return capture_screenshot()
+# Self-skills
+tools.register("list_skills", "List custom skills Friday has created",
+               {"type": "object", "properties": {}}, list_skills)
+tools.register("create_skill", "Draft a new Python skill (name, description, code with run(**kwargs))",
+               {"type": "object", "properties": {
+                   "name": {"type": "string"},
+                   "description": {"type": "string"},
+                   "code": {"type": "string"},
+               }, "required": ["name", "description", "code"]}, create_skill)
+tools.register("run_skill", "Run a custom skill by name",
+               {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}, run_skill)
+tools.register("promote_skill", "Promote a draft skill to active",
+               {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}, promote_skill)
 
-def _webcam() -> str:
-    return capture_webcam()
+# Workshop Mode relaxes confirmations for trusted lab work
+tools.workshop_relaxed = workshop.enabled
 
-tools.register("what_is_on_screen", "Take a screenshot and OCR the text visible on screen",
-               {"type": "object", "properties": {}}, _screen_text)
-tools.register("take_screenshot", "Save a screenshot and return the file path",
-               {"type": "object", "properties": {}}, _screenshot)
-tools.register("capture_webcam", "Capture a frame from the webcam",
-               {"type": "object", "properties": {}}, _webcam)
-
-agent_config = AgentConfig(
+agent = AgentLoop(llm, tools, memory, AgentConfig(
     max_tool_iterations=config["llm"].get("max_tool_iterations", 10),
     embed_model=config["llm"]["embed_model"],
     recall_k=config["memory"].get("recall_k", 8),
-)
-
-
-def log_tool_call(name, args, result):
-    audit_log.write("tool_call", tool=name, arguments=args, result_preview=str(result)[:300])
-
-
-agent = AgentLoop(llm, tools, memory, agent_config, on_tool_call=log_tool_call)
+), on_tool_call=lambda n, a, r: audit_log.write("tool_call", tool=n, arguments=a, result_preview=str(r)[:300]))
 
 _sessions: dict[str, list[dict]] = {}
 
@@ -91,13 +98,15 @@ class ChatResponse(BaseModel):
     needs_confirmation: dict | None
     sandbox_state: str
     tool_trace: list | None = None
+    eta_seconds: int | None = None
+    workshop_mode: bool = False
 
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest):
+    tools.workshop_relaxed = workshop.enabled
     history = _sessions.setdefault(req.session_id, [])
     pending = (req.confirm_tool, req.confirm_arguments) if req.confirm_tool else None
-
     result = agent.run(req.message, history=history, pending_confirmation=pending)
 
     if result["needs_confirmation"] is None and result.get("reply"):
@@ -114,12 +123,9 @@ def chat(req: ChatRequest):
         needs_confirmation=result["needs_confirmation"],
         sandbox_state=sandbox.current_state(),
         tool_trace=result.get("tool_trace"),
+        eta_seconds=result.get("eta_seconds"),
+        workshop_mode=workshop.enabled,
     )
-
-
-@app.get("/audit")
-def get_audit(n: int = 50):
-    return audit_log.tail(n)
 
 
 @app.get("/health")
@@ -128,7 +134,9 @@ def health():
         "status": "ok",
         "model": config["llm"]["model"],
         "sandbox_state": sandbox.current_state(),
-        "version": "0.2.0",
+        "workshop_mode": workshop.enabled,
+        "trusted_targets": len(workshop.trusted),
+        "version": "0.3.0",
     }
 
 
@@ -137,6 +145,14 @@ def list_tools():
     return [s["function"]["name"] for s in tools.schemas()]
 
 
+@app.get("/audit")
+def get_audit(n: int = 50):
+    return audit_log.tail(n)
+
+
 if __name__ == "__main__":
     import uvicorn
+    print("F.R.I.D.A.Y online")
+    print("  API  → http://127.0.0.1:8787")
+    print("  HUD  → http://127.0.0.1:8787/hud/")
     uvicorn.run(app, host=config["server"]["host"], port=config["server"]["port"])

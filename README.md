@@ -1,63 +1,81 @@
-# F.R.I.D.A.Y — Local Iron-Man AI Assistant
+# F.R.I.D.A.Y — Local Iron-Man AI
 
-**100% local · zero cost · full PC control · voice · vision · sandboxed security tools**
+**Fully local · holographic HUD · voice · vision · PC control · Workshop Mode · self-skills**
 
-A realistic desktop AI assistant inspired by MCU F.R.I.D.A.Y / J.A.R.V.I.S.
-Runs a small open-weight LLM through Ollama, sees your screen, hears you, speaks back,
-controls mouse/keyboard/windows/files, browses the web, and includes a strictly
-sandboxed security-testing module for your own lab / CTF / owned hardware.
+A Tony-Stark-style desktop AI that runs on your machine. Blue holographic interface,
+British-female voice (Piper), full computer control, screen vision, web access, and a
+sandboxed security module that can go live on **your** lab targets.
 
-## Features
-
-| Domain | Capability |
-|--------|------------|
-| **Brain** | Qwen2.5-7B (or 3B fallback) via Ollama, tool-calling agent loop |
-| **Voice** | faster-whisper STT + Piper TTS (`en_GB-alba-medium` British female) |
-| **Vision** | Screenshot + Tesseract OCR, webcam capture |
-| **PC Control** | Mouse, keyboard, windows, clipboard, files (home-scoped), processes |
-| **Web** | Playwright browsing, page reading, form fill |
-| **Memory** | Local SQLite + embeddings |
-| **Security** | Docker sandbox by default + explicit typed Go-Live with TTL + audit log |
-| **Safety** | Voice can never trigger Go-Live. No privilege escalation. Append-only audit. |
-
-## Quick Start
+## Quick start
 
 ```bash
-# 1. Clone
 git clone https://github.com/jd0039970-beep/friday-assistant.git
 cd friday-assistant
+bash scripts/install.sh          # or scripts/install.ps1 on Windows
 
-# 2. Install (Ollama + models + Python deps + optional Docker sandbox)
-bash scripts/install.sh          # Linux / macOS
-# or
-powershell -File scripts/install.ps1
-
-# 3. Start backend
-cd backend
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+cd backend && source .venv/bin/activate
 python -m app.main
-
-# 4. Talk to her
-curl -X POST http://127.0.0.1:8787/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello Friday, status report."}'
 ```
 
-Optional: install Piper voice for speech output:
+Then open the HUD:
+
+```
+http://127.0.0.1:8787/hud/
+```
+
+## Holographic HUD
+
+Animated blue circular core (inspired by classic JARVIS rings, rebranded FRIDAY),
+particle field, side system panels, conversation stream, and holographic result cards
+when she shows you scan output, code, or files.
+
+## Workshop Mode (no permission spam)
+
+```
+You: enable workshop mode
+Friday: Workshop Mode ENABLED...
+
+You: add trusted target 192.168.1.50
+Friday: Trusted target added.
+
+You: scan 192.168.1.50
+Friday: (runs nmap live, no extra prompts)
+```
+
+Public internet targets still require explicit attestation. Your lab does not.
+
+## Self-skills
+
+```
+You: create a skill that converts markdown to plain text
+Friday: (writes skill, tests it)
+You: promote that skill
+```
+
+Skills live in `~/.friday/skills/` and can be reused forever.
+
+## Voice
+
 ```bash
 pip install piper-tts
 python -m piper.download_voices en_GB-alba-medium
+python -m app.voice.cli_test
 ```
 
-## Architecture
+## Safety (the only guardrails)
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) and [SAFETY.md](SAFETY.md).
+- Default = Docker sandbox, no network
+- Workshop Mode + trusted list = smooth lab work
+- Voice can never escalate privileges
+- No OS privilege escalation by the agent itself
+- Append-only audit log at `~/.friday/audit.log`
 
-## Roadmap
+## Stack
 
-See [MILESTONES.md](MILESTONES.md). Current focus: full voice pipeline + Tauri desktop shell.
+- Brain: Qwen2.5-7B via Ollama (3B fallback)
+- Voice: faster-whisper + Piper `en_GB-alba-medium`
+- Vision: screenshot + Tesseract, webcam
+- Web: Playwright
+- UI: pure HTML/CSS/JS holographic HUD (Tauri shell later)
 
-## License
-
-MIT — free for any use. The security module deliberately does **not** contain
-exploit code; it only orchestrates tools you install yourself inside a sandbox.
+MIT licensed. Built to be extended.
