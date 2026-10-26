@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>F.R.I.D.A.Y</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#02060c;
+  --cyan:#3fd0ff;
+  --cyan-dim:#1a6b85;
+  --cyan-glow:rgba(63,208,255,.55);
+  --red:#ff4d4d;
+  --fg:#dce8f0;
+  --dim:#6a8294;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--fg);font-family:'IBM Plex Mono',monospace;overflow:hidden}
+
+/* full-screen canvas for particles + ring */
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+canvas#fx{position:absolute;inset:0;width:100%;height:100%}
+
+/* central core */
+.core-wrap{position:relative;z-index:2;width:min(42vw,380px);height:min(42vw,380px);display:flex;align-items:center;justify-content:center}
+.ring{position:absolute;inset:0;border-radius:50%;border:2px solid var(--cyan);box-shadow:0 0 24px var(--cyan-glow),inset 0 0 24px rgba(63,208,255,.12);animation:spin 18s linear infinite}
+.ring::before{content:"";position:absolute;inset:18px;border-radius:50%;border:1px solid rgba(63,208,255,.35)}
+.ring::after{content:"";position:absolute;inset:36px;border-radius:50%;border:1px dashed rgba(63,208,255,.25);animation:spin 12s linear infinite reverse}
+.core-label{position:relative;z-index:3;font-family:'Orbitron',sans-serif;font-weight:700;letter-spacing:.28em;font-size:clamp(14px,2.2vw,22px);color:var(--cyan);text-shadow:0 0 18px var(--cyan-glow)}
+.core-sub{position:absolute;bottom:18%;left:50%;transform:translateX(-50%);font-size:10px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* state colours */
+body.listening .ring{border-color:#7af;box-shadow:0 0 32px rgba(120,180,255,.7)}
+body.thinking .ring{animation-duration:6s}
+body.speaking .core-label{animation:pulse 1.2s infinite}
+body.live .ring{border-color:var(--red);box-shadow:0 0 28px rgba(255,77,77,.65)}
+body.live .core-label{color:#ff8a8a}
+
+/* side panels */
+.panel{position:fixed;top:24px;bottom:24px;width:min(320px,28vw);background:rgba(8,16,24,.72);border:1px solid rgba(63,208,255,.25);border-radius:12px;backdrop-filter:blur(10px);padding:16px;overflow:auto;z-index:5;font-size:12px}
+.panel.left{left:20px}
+.panel.right{right:20px}
+.panel h3{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:.16em;color:var(--cyan);margin-bottom:12px;text-transform:uppercase}
+.panel .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(63,208,255,.08);color:var(--dim)}
+.panel .row b{color:var(--fg);font-weight:500}
+
+/* conversation stream bottom */
+.stream{position:fixed;left:50%;transform:translateX(-50%);bottom:28px;width:min(640px,90vw);max-height:28vh;overflow:auto;z-index:5;display:flex;flex-direction:column;gap:8px}
+.msg{padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.45;max-width:92%}
+.msg.user{align-self:flex-end;background:rgba(20,40,60,.85);border:1px solid rgba(63,208,255,.2)}
+.msg.friday{align-self:flex-start;border-left:2px solid var(--cyan);background:rgba(8,16,24,.55)}
+.msg .tag{display:block;font-size:10px;letter-spacing:.14em;color:var(--cyan);margin-bottom:3px}
+
+/* ETA bar */
+.eta{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:6;display:none;align-items:center;gap:12px;background:rgba(8,16,24,.85);border:1px solid var(--cyan-dim);border-radius:999px;padding:8px 18px;font-size:12px}
+.eta.active{display:flex}
+.eta .bar{width:120px;height:4px;background:#0a1520;border-radius:2px;overflow:hidden}
+.eta .fill{height:100%;background:linear-gradient(90deg,var(--cyan-dim),var(--cyan));width:0%;transition:width .4s}
+
+/* composer */
+.composer{position:fixed;bottom:0;left:0;right:0;height:52px;display:flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(transparent,rgba(2,6,12,.9));z-index:6;padding-bottom:8px}
+.composer input{width:min(480px,70vw);background:rgba(10,18,28,.9);border:1px solid rgba(63,208,255,.3);border-radius:10px;color:var(--fg);padding:10px 14px;font:13px 'IBM Plex Mono',monospace;outline:none}
+.composer input:focus{border-color:var(--cyan);box-shadow:0 0 12px rgba(63,208,255,.25)}
+.mic{width:40px;height:40px;border-radius:50%;background:var(--cyan);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.mic svg{width:18px;height:18px}
+
+/* holographic result card */
+.holo-card{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:8;min-width:280px;max-width:70vw;max-height:60vh;overflow:auto;background:rgba(4,12,20,.88);border:1px solid var(--cyan);border-radius:14px;padding:18px;box-shadow:0 0 40px rgba(63,208,255,.25);display:none}
+.holo-card.open{display:block;animation:holoIn .35s ease}
+.holo-card h4{font-family:'Orbitron',sans-serif;color:var(--cyan);letter-spacing:.12em;margin-bottom:10px;font-size:13px}
+.holo-card pre{white-space:pre-wrap;font-size:12px;color:var(--fg);line-height:1.4}
+.holo-card .close{position:absolute;top:10px;right:14px;cursor:pointer;color:var(--dim);font-size:16px}
+@keyframes holoIn{from{opacity:0;transform:translate(-50%,-48%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="fx"></canvas>
+  <div class="core-wrap">
+    <div class="ring"></div>
+    <div class="core-label">FRIDAY</div>
+    <div class="core-sub" id="statusSub">STANDBY</div>
+  </div>
+</div>
+
+<div class="eta" id="eta"><span id="etaText">Working…</span><div class="bar"><div class="fill" id="etaFill"></div></div><span id="etaTime">--</span></div>
+
+<aside class="panel left">
+  <h3>Systems</h3>
+  <div class="row"><span>Mode</span><b id="modeLabel">SANDBOX</b></div>
+  <div class="row"><span>Model</span><b>Qwen2.5-7B</b></div>
+  <div class="row"><span>Voice</span><b id="voiceState">ready</b></div>
+  <div class="row"><span>Vision</span><b>online</b></div>
+  <div class="row"><span>Web</span><b>online</b></div>
+  <div class="row"><span>Skills</span><b id="skillCount">—</b></div>
+  <h3 style="margin-top:18px">Workshop</h3>
+  <div class="row"><span>Lab mode</span><b id="labMode">OFF</b></div>
+  <div class="row"><span>Trusted</span><b id="trustedCount">0</b></div>
+</aside>
+
+<aside class="panel right">
+  <h3>Activity</h3>
+  <div id="activity"></div>
+</aside>
+
+<div class="stream" id="stream"></div>
+
+<div class="holo-card" id="holoCard">
+  <span class="close" onclick="closeHolo()">×</span>
+  <h4 id="holoTitle">RESULT</h4>
+  <pre id="holoBody"></pre>
+</div>
+
+<div class="composer">
+  <input id="input" placeholder="Speak or type to Friday…" autocomplete="off"/>
+  <button class="mic" id="micBtn" title="Push to talk">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#02060c" stroke-width="2.2"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg>
+  </button>
+</div>
+
+<script>
+const API = "http://127.0.0.1:8787";
+const stream = document.getElementById("stream");
+const input = document.getElementById("input");
+const eta = document.getElementById("eta");
+const etaFill = document.getElementById("etaFill");
+const etaTime = document.getElementById("etaTime");
+const etaText = document.getElementById("etaText");
+const statusSub = document.getElementById("statusSub");
+const modeLabel = document.getElementById("modeLabel");
+const activity = document.getElementById("activity");
+
+// ---- particle + ring canvas ----
+const canvas = document.getElementById("fx");
+const ctx = canvas.getContext("2d");
+let W, H, particles = [];
+function resize(){W=canvas.width=innerWidth;H=canvas.height=innerHeight}
+addEventListener("resize",resize);resize();
+for(let i=0;i<90;i++){
+  particles.push({x:Math.random()*W,y:Math.random()*H,r:Math.random()*1.4+.3,vx:(Math.random()-.5)*.15,vy:(Math.random()-.5)*.15,a:Math.random()*.5+.15});
+}
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // subtle grid
+  ctx.strokeStyle="rgba(63,208,255,0.04)";ctx.lineWidth=1;
+  const step=48;
+  for(let x=0;x<W;x+=step){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+  for(let y=0;y<H;y+=step){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}
+  for(const p of particles){
+    p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0||p.x>W)p.vx*=-1;
+    if(p.y<0||p.y>H)p.vy*=-1;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(63,208,255,${p.a})`;ctx.fill();
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+
+function setState(s){
+  document.body.className=s||"";
+  statusSub.textContent=({listening:"LISTENING",thinking:"PROCESSING",speaking:"SPEAKING",live:"LIVE MODE"}[s]||"STANDBY");
+}
+
+function addMsg(role,text){
+  const d=document.createElement("div");
+  d.className="msg "+role;
+  if(role==="friday")d.innerHTML=`<span class="tag">FRIDAY</span>${text}`;
+  else d.textContent=text;
+  stream.appendChild(d);stream.scrollTop=stream.scrollHeight;
+}
+
+function showHolo(title,body){
+  document.getElementById("holoTitle").textContent=title;
+  document.getElementById("holoBody").textContent=body;
+  document.getElementById("holoCard").classList.add("open");
+}
+function closeHolo(){document.getElementById("holoCard").classList.remove("open")}
+
+function showEta(label,seconds){
+  eta.classList.add("active");etaText.textContent=label;
+  let left=seconds;etaTime.textContent=left+"s";etaFill.style.width="0%";
+  const t0=Date.now();
+  const iv=setInterval(()=>{
+    const elapsed=(Date.now()-t0)/1000;
+    const pct=Math.min(99,(elapsed/seconds)*100);
+    etaFill.style.width=pct+"%";
+    left=Math.max(0,Math.ceil(seconds-elapsed));
+    etaTime.textContent=left+"s";
+    if(elapsed>=seconds){clearInterval(iv);etaFill.style.width="100%";setTimeout(()=>eta.classList.remove("active"),600)}
+  },200);
+  return iv;
+}
+
+async function send(text){
+  if(!text.trim())return;
+  addMsg("user",text);input.value="";
+  setState("thinking");
+  const etaIv=showEta("Processing",8);
+  try{
+    const r=await fetch(API+"/chat",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({message:text})});
+    const data=await r.json();
+    clearInterval(etaIv);eta.classList.remove("active");
+    modeLabel.textContent=data.sandbox_state||"SANDBOX";
+    if(String(data.sandbox_state||"").startsWith("LIVE"))setState("live");
+    else setState("");
+    addMsg("friday",data.reply||"(no reply)");
+    if(data.tool_trace&&data.tool_trace.length){
+      const last=data.tool_trace[data.tool_trace.length-1];
+      activity.insertAdjacentHTML("afterbegin",`<div class="row"><span>${last.tool}</span><b>ok</b></div>`);
+      if(last.result&&last.result.length>80)showHolo(last.tool,last.result);
+    }
+  }catch(e){
+    clearInterval(etaIv);eta.classList.remove("active");setState("");
+    addMsg("friday","Link offline. Is the backend running on :8787?");
+  }
+}
+
+input.addEventListener("keydown",e=>{if(e.key==="Enter")send(input.value)});
+// mic button placeholder — real PTT comes with Tauri shell
+document.getElementById("micBtn").onclick=()=>{setState("listening");setTimeout(()=>setState(""),2000)};
+
+// health ping
+fetch(API+"/health").then(r=>r.json()).then(d=>{
+  modeLabel.textContent=d.sandbox_state||"SANDBOX";
+}).catch(()=>{});
+</script>
+</body>
+</html>
