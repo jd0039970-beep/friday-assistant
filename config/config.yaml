@@ -1,0 +1,34 @@
+llm:
+  provider: ollama
+  base_url: "http://localhost:11434"
+  model: "qwen2.5:7b-instruct-q4_K_M"
+  embed_model: "nomic-embed-text"
+  temperature: 0.4
+  max_tool_iterations: 8
+
+server:
+  host: "127.0.0.1"
+  port: 8787
+
+persona:
+  name: "F.R.I.D.A.Y"
+  tone: "calm, dry British wit, precise, protective"
+
+voice:
+  enabled: false
+  stt_model: "faster-whisper small.en"
+  tts_voice: "en_GB-alba-medium"   # piper voice id
+  push_to_talk_hotkey: "ctrl+shift+space"
+
+memory:
+  db_path: "~/.friday/memory.sqlite3"
+  recall_k: 6
+
+sandbox:
+  docker_image: "friday-sandbox:latest"
+  default_timeout_seconds: 60
+  cpu_limit: "1.0"
+  mem_limit: "1g"
+  live_mode_ttl_minutes: 30
+
+audit_log_path: "~/.friday/audit.log"
