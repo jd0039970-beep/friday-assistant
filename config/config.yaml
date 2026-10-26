@@ -16,12 +16,11 @@ persona:
 
 voice:
   enabled: true
-  stt_model: "small.en"          # faster-whisper size
+  stt_model: "small.en"
   tts_engine: "piper"
-  tts_voice: "en_GB-alba-medium" # best free British female
-  # alternatives: en_GB-cori-high, en_GB-jenny_dioco-medium
+  tts_voice: "en_GB-alba-medium"
   push_to_talk_hotkey: "ctrl+shift+space"
-  wake_word: null                # set to "hey friday" when openWakeWord is wired
+  wake_word: null
 
 vision:
   ocr_enabled: true
@@ -33,10 +32,14 @@ memory:
 
 sandbox:
   docker_image: "friday-sandbox:latest"
-  default_timeout_seconds: 90
+  default_timeout_seconds: 120
   cpu_limit: "1.5"
   mem_limit: "1.5g"
-  live_mode_ttl_minutes: 30
+  live_mode_ttl_minutes: 60
+  # For offline / wired-only / forensics labs: allow any target to go live
+  # without ownership attestation. Safe when the machine has no route to
+  # the public internet (no WiFi/BT, or air-gapped).
+  unrestricted_local: true
 
 audit_log_path: "~/.friday/audit.log"
 
