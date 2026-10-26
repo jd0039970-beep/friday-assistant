@@ -4,7 +4,7 @@ llm:
   model: "qwen2.5:7b-instruct-q4_K_M"
   embed_model: "nomic-embed-text"
   temperature: 0.4
-  max_tool_iterations: 8
+  max_tool_iterations: 10
 
 server:
   host: "127.0.0.1"
@@ -12,23 +12,34 @@ server:
 
 persona:
   name: "F.R.I.D.A.Y"
-  tone: "calm, dry British wit, precise, protective"
+  tone: "calm, dry British wit, precise, protective, slightly sassy"
 
 voice:
-  enabled: false
-  stt_model: "faster-whisper small.en"
-  tts_voice: "en_GB-alba-medium"   # piper voice id
+  enabled: true
+  stt_model: "small.en"          # faster-whisper size
+  tts_engine: "piper"
+  tts_voice: "en_GB-alba-medium" # best free British female
+  # alternatives: en_GB-cori-high, en_GB-jenny_dioco-medium
   push_to_talk_hotkey: "ctrl+shift+space"
+  wake_word: null                # set to "hey friday" when openWakeWord is wired
+
+vision:
+  ocr_enabled: true
+  tesseract_lang: "eng"
 
 memory:
   db_path: "~/.friday/memory.sqlite3"
-  recall_k: 6
+  recall_k: 8
 
 sandbox:
   docker_image: "friday-sandbox:latest"
-  default_timeout_seconds: 60
-  cpu_limit: "1.0"
-  mem_limit: "1g"
+  default_timeout_seconds: 90
+  cpu_limit: "1.5"
+  mem_limit: "1.5g"
   live_mode_ttl_minutes: 30
 
 audit_log_path: "~/.friday/audit.log"
+
+web:
+  headless: true
+  timeout_ms: 30000

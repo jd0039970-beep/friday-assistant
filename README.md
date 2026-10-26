@@ -1,40 +1,63 @@
-# F.R.I.D.A.Y — Local AI Desktop Assistant
+# F.R.I.D.A.Y — Local Iron-Man AI Assistant
 
-A 100%-local, zero-cost, Iron-Man-style AI assistant. Runs a small open-weight LLM
-through Ollama, controls your PC, sees your screen, talks to you, and includes a
-strictly sandboxed security-testing module for your own lab/CTF/owned-hardware work.
+**100% local · zero cost · full PC control · voice · vision · sandboxed security tools**
 
-## Quick start
+A realistic desktop AI assistant inspired by MCU F.R.I.D.A.Y / J.A.R.V.I.S.
+Runs a small open-weight LLM through Ollama, sees your screen, hears you, speaks back,
+controls mouse/keyboard/windows/files, browses the web, and includes a strictly
+sandboxed security-testing module for your own lab / CTF / owned hardware.
+
+## Features
+
+| Domain | Capability |
+|--------|------------|
+| **Brain** | Qwen2.5-7B (or 3B fallback) via Ollama, tool-calling agent loop |
+| **Voice** | faster-whisper STT + Piper TTS (`en_GB-alba-medium` British female) |
+| **Vision** | Screenshot + Tesseract OCR, webcam capture |
+| **PC Control** | Mouse, keyboard, windows, clipboard, files (home-scoped), processes |
+| **Web** | Playwright browsing, page reading, form fill |
+| **Memory** | Local SQLite + embeddings |
+| **Security** | Docker sandbox by default + explicit typed Go-Live with TTL + audit log |
+| **Safety** | Voice can never trigger Go-Live. No privilege escalation. Append-only audit. |
+
+## Quick Start
 
 ```bash
-# 1. Install Ollama + pull the model + python deps
-bash scripts/install.sh          # Linux/macOS
-# or
-powershell -File scripts/install.ps1   # Windows
+# 1. Clone
+git clone https://github.com/jd0039970-beep/friday-assistant.git
+cd friday-assistant
 
-# 2. Start the backend
+# 2. Install (Ollama + models + Python deps + optional Docker sandbox)
+bash scripts/install.sh          # Linux / macOS
+# or
+powershell -File scripts/install.ps1
+
+# 3. Start backend
 cd backend
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 python -m app.main
 
-# 3. (later) run the Tauri desktop shell
-cd frontend && npm install && npm run tauri dev
+# 4. Talk to her
+curl -X POST http://127.0.0.1:8787/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hello Friday, status report."}'
 ```
 
-See `ARCHITECTURE.md` for the system design, `SAFETY.md` for how the sandbox/live-mode
-split works, and `MILESTONES.md` for the build plan.
+Optional: install Piper voice for speech output:
+```bash
+pip install piper-tts
+python -m piper.download_voices en_GB-alba-medium
+```
 
-## What's actually implemented in this starter drop
+## Architecture
 
-- Ollama-backed agent loop with a clean tool-calling protocol (`backend/app/core`)
-- Tool registry + first real tools: filesystem, screenshot, clipboard, mouse/keyboard,
-  notifications, process list (`backend/app/tools`)
-- SQLite + embeddings long-term memory (`backend/app/memory`)
-- Docker-isolated sandbox executor with an explicit, logged "Go Live" gate
-  (`backend/app/sandbox`)
-- Voice pipeline wiring for faster-whisper (STT) and Piper (TTS)
-  (`backend/app/voice`)
-- FastAPI app tying it together with a `/chat` and `/voice` endpoint (`backend/app/main.py`)
+See [ARCHITECTURE.md](ARCHITECTURE.md) and [SAFETY.md](SAFETY.md).
 
-What's deliberately **not** included: an actual exploit/crack engine. The security
-module is an *orchestrator* around tools you install yourself (nmap, hashcat, etc.) —
-see `SAFETY.md` for why and how that boundary is enforced in code.
+## Roadmap
+
+See [MILESTONES.md](MILESTONES.md). Current focus: full voice pipeline + Tauri desktop shell.
+
+## License
+
+MIT — free for any use. The security module deliberately does **not** contain
+exploit code; it only orchestrates tools you install yourself inside a sandbox.
