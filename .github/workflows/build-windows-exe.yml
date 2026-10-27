@@ -1,0 +1,60 @@
+name: Build Friday.exe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/hud/**"
+      - "config/**"
+      - ".github/workflows/build-windows-exe.yml"
+      - "scripts/BUILD_EXE.ps1"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path requirements.txt) { pip install -r requirements.txt }
+          pip install pywebview pyinstaller fastapi "uvicorn[standard]" httpx pyyaml numpy pillow pydantic python-multipart
+
+      - name: Build Friday.exe
+        working-directory: backend
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name Friday `
+            --add-data "../config;config" `
+            --add-data "../frontend/hud;frontend/hud" `
+            --hidden-import uvicorn.logging `
+            --hidden-import uvicorn.loops `
+            --hidden-import uvicorn.loops.auto `
+            --hidden-import uvicorn.protocols `
+            --hidden-import uvicorn.protocols.http `
+            --hidden-import uvicorn.protocols.http.auto `
+            --hidden-import uvicorn.protocols.websockets.auto `
+            --hidden-import uvicorn.lifespan `
+            --hidden-import uvicorn.lifespan.on `
+            --collect-all webview `
+            -m app.desktop
+
+      - name: Zip dist
+        working-directory: backend/dist
+        run: Compress-Archive -Path Friday -DestinationPath Friday-windows.zip -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Friday-windows
+          path: backend/dist/Friday-windows.zip
+          retention-days: 14
