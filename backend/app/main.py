@@ -12,6 +12,38 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from .paths import config_path, hud_dir
+
+CONFIG_PATH = config_path()
+
+
+def load_config() -> dict:
+    path = CONFIG_PATH
+    if not path.exists():
+        # Minimal fallback so the window can still open
+        return {
+            "llm": {"base_url": "http://localhost:11434", "model": "qwen2.5:7b-instruct-q4_K_M",
+                    "embed_model": "nomic-embed-text", "temperature": 0.4, "max_tool_iterations": 12},
+            "server": {"host": "127.0.0.1", "port": 8787},
+            "memory": {"db_path": str(Path.home() / ".friday" / "memory.sqlite3"), "recall_k": 8},
+            "sandbox": {"unrestricted_local": True, "live_mode_ttl_minutes": 60},
+            "audit_log_path": str(Path.home() / ".friday" / "audit.log"),
+            "web": {"headless": True},
+            "voice": {"stt_model": "small.en"},
+        }
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+config = load_config()
+app = FastAPI(title="F.R.I.D.A.Y", version="0.7.1")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+HUD_DIR = hud_dir()
+if HUD_DIR.exists():
+    app.mount("/hud", StaticFiles(directory=str(HUD_DIR), html=True), name="hud")
+
+# Heavy imports — keep after config so fallback works
 from .bootcheck import run_boot_check
 from .core.agent_loop import AgentConfig, AgentLoop
 from .core.llm_client import OllamaClient
@@ -28,25 +60,6 @@ from .tools.registry import ToolRegistry
 from .tools.shell_tools import register_shell_tools
 from .tools.system_tools import register_system_tools
 from .tools.web_tools import register_web_tools
-from .vision.screen import screen_text, capture_screenshot
-from .vision.webcam import capture_webcam
-from .voice.stt import FasterWhisperSTT
-
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
-
-
-def load_config() -> dict:
-    with open(CONFIG_PATH) as f:
-        return yaml.safe_load(f)
-
-
-config = load_config()
-app = FastAPI(title="F.R.I.D.A.Y", version="0.7.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-HUD_DIR = Path(__file__).resolve().parents[2] / "frontend" / "hud"
-if HUD_DIR.exists():
-    app.mount("/hud", StaticFiles(directory=str(HUD_DIR), html=True), name="hud")
 
 llm = OllamaClient(base_url=config["llm"]["base_url"], model=config["llm"]["model"],
                    temperature=config["llm"].get("temperature", 0.4))
@@ -54,7 +67,12 @@ memory = MemoryStore(config["memory"]["db_path"])
 audit_log = AuditLog(config["audit_log_path"])
 sandbox = SandboxController(config["sandbox"], audit_log)
 proactive = ProactiveMonitor(interval=15.0)
-stt = FasterWhisperSTT(model_size=config.get("voice", {}).get("stt_model", "small.en").replace("faster-whisper ", ""))
+
+try:
+    from .voice.stt import FasterWhisperSTT
+    stt = FasterWhisperSTT(model_size=config.get("voice", {}).get("stt_model", "small.en").replace("faster-whisper ", ""))
+except Exception:
+    stt = None
 
 LAST_BOOT: dict | None = None
 
@@ -65,14 +83,16 @@ register_shell_tools(tools)
 register_security_tools(tools, sandbox, voice_sourced=False)
 register_web_tools(tools, headless=config.get("web", {}).get("headless", True))
 
-tools.register("what_is_on_screen", "Screenshot + OCR",
-               {"type": "object", "properties": {}}, lambda: screen_text())
-tools.register("take_screenshot", "Save screenshot",
-               {"type": "object", "properties": {}}, lambda: capture_screenshot())
-tools.register("capture_webcam", "Webcam frame",
-               {"type": "object", "properties": {}}, lambda: capture_webcam())
-tools.register("list_skills", "List custom skills",
-               {"type": "object", "properties": {}}, list_skills)
+try:
+    from .vision.screen import screen_text, capture_screenshot
+    from .vision.webcam import capture_webcam
+    tools.register("what_is_on_screen", "Screenshot + OCR", {"type": "object", "properties": {}}, lambda: screen_text())
+    tools.register("take_screenshot", "Save screenshot", {"type": "object", "properties": {}}, lambda: capture_screenshot())
+    tools.register("capture_webcam", "Webcam frame", {"type": "object", "properties": {}}, lambda: capture_webcam())
+except Exception:
+    pass
+
+tools.register("list_skills", "List custom skills", {"type": "object", "properties": {}}, list_skills)
 tools.register("create_skill", "Draft new skill",
                {"type": "object", "properties": {
                    "name": {"type": "string"}, "description": {"type": "string"}, "code": {"type": "string"},
@@ -81,8 +101,7 @@ tools.register("run_skill", "Run custom skill",
                {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}, run_skill)
 tools.register("promote_skill", "Promote skill",
                {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}, promote_skill)
-tools.register("list_forensics_packs", "List forensics packs",
-               {"type": "object", "properties": {}}, list_forensics_packs)
+tools.register("list_forensics_packs", "List forensics packs", {"type": "object", "properties": {}}, list_forensics_packs)
 
 
 def _run_pack(pack: str, target: str, hash_file: str | None = None, wordlist: str | None = None) -> str:
@@ -99,8 +118,7 @@ def _run_pack(pack: str, target: str, hash_file: str | None = None, wordlist: st
 
 
 tools.register(
-    "run_forensics_pack",
-    "Run forensics pack on target",
+    "run_forensics_pack", "Run forensics pack on target",
     {"type": "object", "properties": {
         "pack": {"type": "string"}, "target": {"type": "string"},
         "hash_file": {"type": "string"}, "wordlist": {"type": "string"},
@@ -108,10 +126,9 @@ tools.register(
     _run_pack,
 )
 
-# Long-task planner tools
 tools.register(
     "create_plan",
-    "Create a multi-step plan for a long goal. Pass goal + list of step descriptions.",
+    "Create a multi-step plan",
     {"type": "object", "properties": {
         "goal": {"type": "string"},
         "steps": {"type": "array", "items": {"type": "string"}},
@@ -120,13 +137,11 @@ tools.register(
         lambda p: f"Plan {p.id} created for: {goal}\n" + "\n".join(f"  {s.id}. {s.description}" for s in p.steps)
     )(create_plan(goal, steps)),
 )
-tools.register("list_plans", "List saved long-task plans",
-               {"type": "object", "properties": {}}, list_plans)
-tools.register("plan_status", "Show plan progress",
+tools.register("list_plans", "List plans", {"type": "object", "properties": {}}, list_plans)
+tools.register("plan_status", "Plan status",
                {"type": "object", "properties": {"plan_id": {"type": "string"}}, "required": ["plan_id"]}, plan_status)
 tools.register(
-    "mark_step",
-    "Update a plan step status (pending|running|done|failed|skipped) and optional result text",
+    "mark_step", "Update plan step",
     {"type": "object", "properties": {
         "plan_id": {"type": "string"}, "step_id": {"type": "string"},
         "status": {"type": "string"}, "result": {"type": "string"},
@@ -165,8 +180,6 @@ class ChatResponse(BaseModel):
 def _do_boot() -> str:
     global LAST_BOOT
     smoke = {
-        "system_info": lambda: tools.call("system_info", {}),
-        "list_dir_home": lambda: tools.call("list_dir", {"path": "~"}),
         "list_forensics": list_forensics_packs,
         "list_skills": list_skills,
         "list_plans": list_plans,
@@ -181,8 +194,7 @@ def _do_boot() -> str:
 @app.on_event("startup")
 def _startup():
     proactive.start()
-    summary = _do_boot()
-    print(summary)
+    print(_do_boot())
 
 
 def _run_chat(message: str, session_id: str = "default") -> ChatResponse:
@@ -214,6 +226,10 @@ def chat(req: ChatRequest):
 
 @app.post("/voice", response_model=ChatResponse)
 async def voice(file: UploadFile = File(...), session_id: str = "default"):
+    if stt is None:
+        return ChatResponse(reply="Voice not available in this build. Type instead.",
+                            needs_confirmation=None, sandbox_state=sandbox.current_state(),
+                            workshop_mode=workshop.enabled, transcript="")
     data = await file.read()
     suffix = Path(file.filename or "audio.webm").suffix or ".webm"
     try:
@@ -223,7 +239,7 @@ async def voice(file: UploadFile = File(...), session_id: str = "default"):
                             needs_confirmation=None, sandbox_state=sandbox.current_state(),
                             workshop_mode=workshop.enabled, transcript="")
     if not text.strip():
-        return ChatResponse(reply="I didn't catch anything. Hold Tab and speak again.",
+        return ChatResponse(reply="I didn't catch anything.",
                             needs_confirmation=None, sandbox_state=sandbox.current_state(),
                             workshop_mode=workshop.enabled, transcript="")
     resp = _run_chat(text, session_id)
@@ -273,7 +289,7 @@ def health():
         "workshop_mode": workshop.enabled,
         "trusted_targets": len(workshop.trusted),
         "boot_ok": None if LAST_BOOT is None else LAST_BOOT.get("all_ok"),
-        "version": "0.7.0",
+        "version": "0.7.1",
     }
 
 
@@ -290,7 +306,4 @@ def get_audit(n: int = 50):
 if __name__ == "__main__":
     import uvicorn
     print("F.R.I.D.A.Y online")
-    print("  API  → http://127.0.0.1:8787")
-    print("  HUD  → http://127.0.0.1:8787/hud/")
-    print("  Tab = talk · Esc = SHUT DOWN")
     uvicorn.run(app, host=config["server"]["host"], port=config["server"]["port"])

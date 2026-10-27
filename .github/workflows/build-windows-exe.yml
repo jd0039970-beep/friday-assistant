@@ -14,11 +14,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
@@ -30,23 +28,21 @@ jobs:
           if (Test-Path requirements.txt) { pip install -r requirements.txt }
           pip install pywebview pyinstaller fastapi "uvicorn[standard]" httpx pyyaml numpy pillow pydantic python-multipart
 
-      - name: Ensure entry script
+      - name: Entry script
         working-directory: backend
         shell: pwsh
         run: |
-          if (-not (Test-Path "app\desktop.py")) { throw "app/desktop.py missing" }
-          # PyInstaller needs a .py file path, not -m
           @"
           from app.desktop import main
           if __name__ == "__main__":
               main()
           "@ | Set-Content -Encoding UTF8 run_friday.py
 
-      - name: Build Friday.exe
+      - name: Build Friday.exe (console so errors show)
         working-directory: backend
         shell: pwsh
         run: |
-          pyinstaller --noconfirm --clean --windowed --name Friday `
+          pyinstaller --noconfirm --clean --console --name Friday `
             --paths . `
             --add-data "../config;config" `
             --add-data "../frontend/hud;frontend/hud" `
@@ -63,6 +59,7 @@ jobs:
             --hidden-import app `
             --hidden-import app.main `
             --hidden-import app.desktop `
+            --hidden-import app.paths `
             --collect-all webview `
             run_friday.py
 
@@ -71,8 +68,7 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path Friday -DestinationPath Friday-windows.zip -Force
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Friday-windows
           path: backend/dist/Friday-windows.zip
