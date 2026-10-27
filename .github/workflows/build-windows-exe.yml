@@ -9,7 +9,6 @@ on:
       - "frontend/hud/**"
       - "config/**"
       - ".github/workflows/build-windows-exe.yml"
-      - "scripts/BUILD_EXE.ps1"
 
 jobs:
   build:
@@ -25,17 +24,33 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
+        shell: pwsh
         run: |
           python -m pip install --upgrade pip
           if (Test-Path requirements.txt) { pip install -r requirements.txt }
           pip install pywebview pyinstaller fastapi "uvicorn[standard]" httpx pyyaml numpy pillow pydantic python-multipart
 
+      - name: Ensure entry script
+        working-directory: backend
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "app\desktop.py")) { throw "app/desktop.py missing" }
+          # PyInstaller needs a .py file path, not -m
+          @"
+          from app.desktop import main
+          if __name__ == "__main__":
+              main()
+          "@ | Set-Content -Encoding UTF8 run_friday.py
+
       - name: Build Friday.exe
         working-directory: backend
+        shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --windowed --name Friday `
+            --paths . `
             --add-data "../config;config" `
             --add-data "../frontend/hud;frontend/hud" `
+            --hidden-import uvicorn `
             --hidden-import uvicorn.logging `
             --hidden-import uvicorn.loops `
             --hidden-import uvicorn.loops.auto `
@@ -45,11 +60,15 @@ jobs:
             --hidden-import uvicorn.protocols.websockets.auto `
             --hidden-import uvicorn.lifespan `
             --hidden-import uvicorn.lifespan.on `
+            --hidden-import app `
+            --hidden-import app.main `
+            --hidden-import app.desktop `
             --collect-all webview `
-            -m app.desktop
+            run_friday.py
 
       - name: Zip dist
         working-directory: backend/dist
+        shell: pwsh
         run: Compress-Archive -Path Friday -DestinationPath Friday-windows.zip -Force
 
       - name: Upload artifact
@@ -57,4 +76,4 @@ jobs:
         with:
           name: Friday-windows
           path: backend/dist/Friday-windows.zip
-          retention-days: 14
+          retention-days: 30
