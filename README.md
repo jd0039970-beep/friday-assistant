@@ -1,24 +1,30 @@
 # F.R.I.D.A.Y
 
-Local Iron-Man AI. Voice, vision, PC control, lab tools. Runs on your machine.
+Local Iron-Man AI. Runs on your PC only.
 
-## Install everything (one paste)
-
-**PowerShell as Administrator** → paste this → Enter:
+## Build the real .exe (native window — not a browser)
 
 ```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; irm https://raw.githubusercontent.com/jd0039970-beep/friday-assistant/main/INSTALL_EVERYTHING.ps1 | iex
+cd C:\Users\frost\friday-assistant
+git pull
+powershell -ExecutionPolicy Bypass -File scripts\BUILD_EXE.ps1
 ```
 
-That installs Git, Python, Ollama, Docker Desktop, Friday, packages, models, and a Desktop shortcut.
+When it finishes:
 
-If Docker/Ollama were new: reboot once, then double-click **F.R.I.D.A.Y** on the Desktop.
+```
+backend\dist\Friday\Friday.exe
+```
 
-HUD: http://127.0.0.1:8787/hud/  
-**Tab** = talk · **Esc** = shut down
+Double-click **Friday.exe** (or the Desktop shortcut).  
+Native OS window via pywebview. Backend starts inside the same process. No browser.
 
-## What you get
+## First-time machine setup (if needed)
 
-Holographic HUD, push-to-talk, full shutdown on Esc, Workshop Mode, forensics packs, long-task planner, boot checks, self-skills.
+```powershell
+powershell -ExecutionPolicy Bypass -File INSTALL_EVERYTHING.ps1
+```
 
-MIT. Local only.
+Then run `BUILD_EXE.ps1` as above.
+
+Tab = talk · Esc = shut down · Everything local.
